@@ -1,97 +1,52 @@
+# app.py — TF-IDF Q&A (English) · robusto y configurable
+import re
+import unicodedata
+from typing import List
+
+import numpy as np
+import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import pandas as pd
-import re
-from nltk.stem import SnowballStemmer
 
-st.title("Demo de TF-IDF con Preguntas y Respuestas")
+# ─────────────────────────────────────────────────────────────
+# Stemming inglés (sin dependencias extra de corpus)
+try:
+    from nltk.stem import SnowballStemmer
+    STEMMER = SnowballStemmer("english")
+    def stem_en(t: str) -> str: return STEMMER.stem(t)
+except Exception:
+    # Fallback: identidad (sin stemming) si NLTK no está disponible
+    def stem_en(t: str) -> str: return t
+
+# ─────────────────────────────────────────────────────────────
+st.set_page_config(page_title="TF-IDF Q&A (English)", page_icon="🔎", layout="wide")
+st.title("🔎 TF-IDF Q&A (English) — Mini IR Lab")
 
 st.write("""
-Cada línea se trata como un **documento** (puede ser una frase, un párrafo o un texto más largo).  
-⚠️ Los documentos y las preguntas deben estar en **inglés**, ya que el análisis está configurado para ese idioma.  
-
-La aplicación aplica normalización y *stemming* para que palabras como *playing* y *play* se consideren equivalentes.
+Each line is treated as a **document**.  
+This demo expects **English** text (stopwords/normalization tuned for EN).
+You can tweak preprocessing, n-grams, and df thresholds in the sidebar.
 """)
 
 # Ejemplo inicial en inglés
-text_input = st.text_area(
-    "Escribe tus documentos (uno por línea, en inglés):",
-    "The dog barks loudly.\nThe cat meows at night.\nThe dog and the cat play together."
-)
+DEFAULT_DOCS = """The dog barks loudly.
+The cat meows at night.
+The dog and the cat play together in the garden.
+Kids run and have fun in the park.
+Music is very loud at the party.
+Birds sing beautiful melodies at dawn."""
 
-question = st.text_input("Escribe una pregunta (en inglés):", "Who is playing?")
+SUGGESTED = [
+    "Who is playing?",
+    "Where do kids have fun?",
+    "When do birds sing?",
+    "Where is the music loud?",
+    "Which animal meows at night?",
+]
 
-# Inicializar stemmer para inglés
-stemmer = SnowballStemmer("english")
-
-def tokenize_and_stem(text: str):
-    # Pasar a minúsculas
-    text = text.lower()
-    # Eliminar caracteres no alfabéticos
-    text = re.sub(r'[^a-z\s]', ' ', text)
-    # Tokenizar (palabras con longitud > 1)
-    tokens = [t for t in text.split() if len(t) > 1]
-    # Aplicar stemming
-    stems = [stemmer.stem(t) for t in tokens]
-    return stems
-
-if st.button("Calcular TF-IDF y buscar respuesta"):
-    documents = [d.strip() for d in text_input.split("\n") if d.strip()]
-    if len(documents) < 1:
-        st.warning("⚠️ Ingresa al menos un documento.")
-    else:
-        # Vectorizador con stemming
-        vectorizer = TfidfVectorizer(
-            tokenizer=tokenize_and_stem,
-            stop_words="english",
-            token_pattern=None
-        )
-
-        # Ajustar con documentos
-        X = vectorizer.fit_transform(documents)
-
-        # Mostrar matriz TF-IDF
-        df_tfidf = pd.DataFrame(
-            X.toarray(),
-            columns=vectorizer.get_feature_names_out(),
-            index=[f"Doc {i+1}" for i in range(len(documents))]
-        )
-
-        st.write("### Matriz TF-IDF (stems)")
-        st.dataframe(df_tfidf.round(3))
-
-        # Vector de la pregunta
-        question_vec = vectorizer.transform([question])
-
-        # Similitud coseno
-        similarities = cosine_similarity(question_vec, X).flatten()
-
-        # Documento más parecido
-        best_idx = similarities.argmax()
-        best_doc = documents[best_idx]
-        best_score = similarities[best_idx]
-
-        st.write("### Pregunta y respuesta")
-        st.write(f"**Tu pregunta:** {question}")
-        st.write(f"**Documento más relevante (Doc {best_idx+1}):** {best_doc}")
-        st.write(f"**Puntaje de similitud:** {best_score:.3f}")
-
-        # Mostrar todas las similitudes
-        sim_df = pd.DataFrame({
-            "Documento": [f"Doc {i+1}" for i in range(len(documents))],
-            "Texto": documents,
-            "Similitud": similarities
-        })
-        st.write("### Puntajes de similitud (ordenados)")
-        st.dataframe(sim_df.sort_values("Similitud", ascending=False))
-
-        # Mostrar coincidencias de stems
-        vocab = vectorizer.get_feature_names_out()
-        q_stems = tokenize_and_stem(question)
-        matched = [s for s in q_stems if s in vocab and df_tfidf.iloc[best_idx].get(s, 0) > 0]
-        st.write("### Stems de la pregunta presentes en el documento elegido:", matched)
-
-
-
-
+# ─────────────────────────────────────────────────────────────
+# Prepro y tokenización
+def strip_accents(s: str) -> str:
+    nkfd = unicodedata.normalize("NFKD", s)
+    return "".
